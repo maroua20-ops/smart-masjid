@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Masjid - Rabat</title>
+
+    <!-- Importer les fichiers locaux de Leaflet -->
+    <link rel="stylesheet" href="leaflet.css" />
+    <script src="leaflet.js"></script>
+
+    <!-- Importation de la police élégante et islamique -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+              font-family: 'Cairo', sans-serif;
+              color: var(--text-color);
+              margin: 0;
+              padding: 0;
+              background-image: url('imageback.jpg'); /* Remplacez cette URL par le chemin de votre image */
+              background-size: cover;
+              background-position: center;
+              background-repeat: no-repeat;
+        }
+
+        h2 {
+            text-align: center;
+            font-size: 2rem;
+            margin-top: 20px;
+            color: #f8fbff;
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border: 3px solid #e6ad00; /* Bordure en vert */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .leaflet-popup-content {
+            font-family: 'Cairo', sans-serif;
+            font-size: 1.1rem;
+            color: #2c3e50;
+        }
+
+        .leaflet-marker-icon {
+            background-color: #efac0d; /* Couleur de fond des marqueurs */
+            border-radius: 50%;
+        }
+
+        .map-title {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            background-color: #f6d70e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .button:hover {
+            background-color: #f6c411;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 class="map-title">La mosquée la plus proche à vous</h2>
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([33.974196, -6.861435], 14); // Par défaut sur Lalla Soukaina Mosque
+
+        // Ajouter une couche OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+        }).addTo(map);
+
+        // Fonction pour localiser l'utilisateur
+        function locateUser() {
+            if (!navigator.geolocation) {
+                alert("La géolocalisation n'est pas supportée par votre navigateur");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(position => {
+                var userLat = position.coords.latitude;
+                var userLng = position.coords.longitude;
+
+                // Ajouter un marqueur pour l'utilisateur
+                var userMarker = L.marker([userLat, userLng], {
+                    icon: L.icon({
+                        iconUrl: 'user.avif',
+                        iconSize: [40, 40],
+                    })
+                }).addTo(map)
+                    .bindPopup("Vous êtes ici").openPopup();
+
+                map.setView([userLat, userLng], 15); // Zoom sur la position de l'utilisateur
+
+                // Chercher la mosquée la plus proche
+                findNearestMosque(userLat, userLng);
+            });
+        }
+
+        locateUser();
+
+        // Liste des mosquées avec les nouvelles coordonnées
+        var mosques = [
+            { name: "Lalla Soukaina Mosque", coords: [33.974196, -6.861435] },
+            { name: "Souissi University City Mosque", coords: [33.985796, -6.860431] },
+            { name: "Islamic Fraternity Mosque", coords: [33.977051, -6.873598] }
+        ];
+
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            var R = 6371; // Rayon de la Terre en km
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLng = (lng2 - lng1) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distance en km
+        }
+
+        function findNearestMosque(userLat, userLng) {
+            var nearestMosque = null;
+            var minDistance = Infinity;
+
+            // Recherche de la mosquée la plus proche
+            mosques.forEach(mosque => {
+                var distance = calculateDistance(userLat, userLng, mosque.coords[0], mosque.coords[1]);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestMosque = mosque;
+                }
+            });
+
+            if (nearestMosque) {
+                // Ajouter un marqueur pour la mosquée la plus proche
+                var mosqueMarker = L.marker([nearestMosque.coords[0], nearestMosque.coords[1]], {
+                    icon: L.icon({
+                        iconUrl: 'imageback.jpg',
+                        iconSize: [40, 40],
+                    })
+                }).addTo(map)
+                    .bindPopup(`Mosquée la plus proche : ${nearestMosque.name} <br> Distance : ${minDistance.toFixed(2)} km`).openPopup();
+
+                // Centrer la carte sur la mosquée la plus proche et zoomer dessus
+                map.setView([nearestMosque.coords[0], nearestMosque.coords[1]], 15); // Zoom sur la mosquée
+
+                // Tracer le chemin entre l'utilisateur et la mosquée
+                drawRoute(userLat, userLng, nearestMosque.coords[0], nearestMosque.coords[1]);
+            }
+        }
+
+        // Fonction pour dessiner l'itinéraire entre l'utilisateur et la mosquée
+        function drawRoute(startLat, startLng, endLat, endLng) {
+            var osrmUrl = `https://router.project-osrm.org/route/v1/walking/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+
+            fetch(osrmUrl)
+                .then(response => response.json())
+                .then(data => {
+                    var routeCoords = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    L.polyline(routeCoords, { color: '#f6c411', weight: 5 }).addTo(map);
+                })
+                .catch(error => console.error('Erreur lors du tracé de l\'itinéraire:', error));
+        }
+
+    </script>
+</body>
+</html>
